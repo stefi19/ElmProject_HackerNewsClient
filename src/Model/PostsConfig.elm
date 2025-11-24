@@ -1,6 +1,5 @@
 module Model.PostsConfig exposing (Change(..), PostsConfig, SortBy(..), applyChanges, defaultConfig, filterPosts, sortFromString, sortOptions, sortToCompareFn, sortToString)
 
-import Html.Attributes exposing (scope)
 import Model.Post exposing (Post)
 import Time
 
@@ -20,18 +19,10 @@ sortOptions =
 sortToString : SortBy -> String
 sortToString sort =
     case sort of
-        Score ->
-            "Score"
-
-        Title ->
-            "Title"
-
-        Posted ->
-            "Posted"
-
-        None ->
-            "None"
-
+        Score -> "Score"
+        Title -> "Title"
+        Posted -> "Posted"
+        None -> "None"
 
 {-|
 
@@ -43,10 +34,13 @@ sortToString sort =
 
 -}
 sortFromString : String -> Maybe SortBy
-sortFromString _ =
-    -- Nothing
-    Debug.todo "sortFromString"
-
+sortFromString s =
+    case s of
+        "Score" -> Just Score
+        "Title" -> Just Title
+        "Posted" -> Just Posted
+        "None" ->Just None
+        _ -> Nothing
 
 sortToCompareFn : SortBy -> (Post -> Post -> Order)
 sortToCompareFn sort =
@@ -82,14 +76,22 @@ defaultConfig =
 -}
 type Change
     = ChangeTODO
+    | SetPostsToShow Int
+    | SetSortBy SortBy
+    | SetShowJobs Bool
+    | SetShowTextOnly Bool
 
 
 {-| Given a change and the current configuration, return a new configuration with the changes applied
 -}
 applyChanges : Change -> PostsConfig -> PostsConfig
-applyChanges _ _ =
-    Debug.todo "applyChanges"
-
+applyChanges change config =
+    case change of
+        ChangeTODO -> config
+        SetPostsToShow n -> { config | postsToShow = n }
+        SetSortBy s -> { config | sortBy = s }
+        SetShowJobs b -> { config | showJobs = b }
+        SetShowTextOnly b -> { config | showTextOnly = b }
 
 {-| Given the configuration and a list of posts, return the relevant subset of posts according to the configuration
 
@@ -103,6 +105,33 @@ Relevant library functions:
 
 -}
 filterPosts : PostsConfig -> List Post -> List Post
-filterPosts _ _ =
-    -- []
-    Debug.todo "filterPosts"
+filterPosts config posts =
+    let
+        -- filter out text-only posts (those with no url) when showTextOnly is False
+        postsAfterTextFilter =
+            if config.showTextOnly then
+                posts
+            else
+                List.filter (\t -> t.url /= Nothing) posts
+
+        -- filter out job posts when showJobs is False
+        postsAfterJobFilter =
+            if config.showJobs then
+                postsAfterTextFilter
+            else
+                List.filter (\t -> t.type_ /= "job") postsAfterTextFilter
+
+        -- take at most postsToShow from the filtered list (preserve original order)
+        limited =
+            List.take config.postsToShow postsAfterJobFilter
+
+        -- sort the limited list according to sortBy
+        sortedLimited =
+            case config.sortBy of
+                None ->
+                    limited
+
+                _ ->
+                    List.sortWith (sortToCompareFn config.sortBy) limited
+    in
+    sortedLimited

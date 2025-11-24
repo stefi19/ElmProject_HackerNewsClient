@@ -1,11 +1,11 @@
 module View.Posts exposing (..)
 
-import Html exposing (Html, div, text)
-import Html.Attributes exposing (href)
-import Html.Events
+import Html exposing (Html, a, button, div, label, table, thead, tbody, tr, th, td, text, select, option, input)
+import Html.Attributes exposing (class, href, title, id, type_, checked, selected, value)
+import Html.Events exposing (onCheck, onInput, onClick)
 import Model exposing (Msg(..))
 import Model.Post exposing (Post)
-import Model.PostsConfig exposing (Change(..), PostsConfig, SortBy(..), filterPosts, sortFromString, sortOptions, sortToCompareFn, sortToString)
+import Model.PostsConfig exposing (Change(..), PostsConfig, SortBy(..), sortFromString, sortOptions, sortToString)
 import Time
 import Util.Time
 
@@ -28,9 +28,57 @@ Relevant library functions:
 
 -}
 postTable : PostsConfig -> Time.Posix -> List Post -> Html Msg
-postTable _ _ _ =
-    -- div [] []
-    Debug.todo "postTable"
+postTable config now postsList =
+  let
+    filteredPosts = Model.PostsConfig.filterPosts config postsList
+    totalCount = List.length postsList
+    shownCount = List.length filteredPosts
+
+    row post =
+      let
+        visibleTime = Util.Time.formatTime Time.utc post.time
+        relative =
+          Util.Time.durationBetween post.time now
+            |> Maybe.map Util.Time.formatDuration
+            |> Maybe.withDefault ""
+
+        urlCell =
+          case post.url of
+            Just u ->
+              a [ href u ] [ text u ]
+
+            Nothing ->
+              text ""
+      in
+      tr []
+        [ td [ class "post-score" ] [ text (String.fromInt post.score) ]
+        , td [ class "post-title" ] [ text post.title ]
+        , td [ class "post-type" ] [ text post.type_ ]
+        , td [ class "post-time", title relative ]
+          [ text visibleTime
+          , (if relative == "" then text "" else text (" (" ++ relative ++ ")"))
+          ]
+        , td [ class "post-url" ] [ urlCell ]
+        ]
+  in
+  div []
+    [ table []
+      [ thead []
+        [ tr []
+          [ th [] [ text "Score" ]
+          , th [] [ text "Title" ]
+          , th [] [ text "Type" ]
+          , th [] [ text "Posted" ]
+          , th [] [ text "Link" ]
+          ]
+        ]
+  , tbody [] (filteredPosts |> List.map row)
+      ]
+    , div [ id "posts-controls" ]
+      [ text ("Showing " ++ String.fromInt shownCount ++ " of " ++ String.fromInt totalCount ++ " posts")
+      , button [ onClick (ConfigChanged (SetPostsToShow (config.postsToShow + 10))) ] [ text "Load more" ]
+      ]
+    ]
 
 
 {-| Show the configuration options for the posts table
@@ -48,6 +96,45 @@ Relevant functions:
 
 -}
 postsConfigView : PostsConfig -> Html Msg
-postsConfigView _ =
-    -- div [] []
-    Debug.todo "postsConfigView"
+postsConfigView config =
+  let
+    postsOptions = [ 10, 25, 50 ]
+    postsOptionsView =
+      postsOptions
+        |> List.map
+            (\n ->
+                option
+                    [ value (String.fromInt n), selected (n == config.postsToShow) ]
+                    [ text (String.fromInt n) ]
+            )
+    sortOptionsView =
+      sortOptions |> List.map (\fmt ->
+            let
+              str = sortToString fmt
+            in
+            option
+              [ value str, selected (fmt == config.sortBy) ]
+              [ text str ])
+    
+  in
+  div []
+    [ -- posts per page select
+    select
+    [ id "select-posts-per-page"
+    , onInput (String.toInt >> Maybe.map SetPostsToShow >> Maybe.withDefault ChangeTODO >> ConfigChanged)
+    ]
+    postsOptionsView
+      -- sort by select
+  , select
+    [ id "select-sort-by"
+    , onInput (sortFromString >> Maybe.map SetSortBy >> Maybe.withDefault ChangeTODO >> ConfigChanged)
+    ]
+    sortOptionsView
+      -- show job posts checkbox
+  , label [] [ input [ id "checkbox-show-job-posts", type_ "checkbox", checked config.showJobs, onCheck (SetShowJobs >> ConfigChanged) ] [], text " Show job posts" ]
+      -- show text-only posts checkbox
+  , label [] [ input [ id "checkbox-show-text-only-posts", type_ "checkbox", checked config.showTextOnly, onCheck (SetShowTextOnly >> ConfigChanged) ] [], text " Show text posts" ]
+    
+    -- theme toggle
+  , button [ onClick ToggleTheme ] [ text "Toggle theme" ]
+    ]

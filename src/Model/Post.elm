@@ -34,5 +34,28 @@ Relevant library functions:
 -}
 decode : De.Decoder Post
 decode =
-    -- De.fail "TODO"
-    Debug.todo "Post.decode"
+  let
+    urlDecoder : De.Decoder (Maybe String)
+    urlDecoder =
+      De.oneOf
+        [ De.field "url" (De.maybe De.string)
+        , De.succeed Nothing
+        ]
+  in
+  De.map7
+    (\by id score title url time typeStr ->
+      { by = by
+      , id = id
+      , score = score
+      , title = title
+      , url = url
+      , time = Time.millisToPosix (time * 1000)
+      , type_ = typeStr
+      })
+  (De.field "by" De.string)
+  (De.field "id" De.int)
+  (De.field "score" De.int)
+  (De.field "title" De.string)
+    urlDecoder
+    (De.field "time" De.int)
+  (De.field "type" De.string)

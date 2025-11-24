@@ -7,6 +7,7 @@ module Model exposing
     , Mode(..)
     , Model
     , Msg(..)
+    , Theme(..)
     , initModel
     )
 
@@ -23,6 +24,7 @@ type Msg
     | GotPostIds (Result Http.Error (Maybe PostIds))
     | GotPost (Result Http.Error Post)
     | ConfigChanged PostsConfig.Change
+    | ToggleTheme
 
 
 type alias LoadingState =
@@ -49,6 +51,7 @@ type AppState
 type alias Model =
     { config : Config
     , state : AppState
+    , theme : Theme
     }
 
 
@@ -65,4 +68,9 @@ type alias Config =
 
 initModel : Config -> Model
 initModel config =
-    { config = config, state = Empty { config = defaultConfig } }
+    { config = config, state = Empty { config = defaultConfig }, theme = Light }
+
+
+type Theme
+    = Light
+    | Dark

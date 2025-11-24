@@ -12,7 +12,6 @@ Finally, focusing on the third element is: `Cursor [2, 1] 3 []`.
 
 -}
 
-
 type Cursor a
     = Cursor (List a) a (List a)
 
@@ -35,9 +34,13 @@ nonEmpty x xs =
 
 -}
 fromList : List a -> Maybe (Cursor a)
-fromList _ =
-    -- Nothing
-    Debug.todo "fromList"
+fromList x =
+    case x of
+        [] ->
+            Nothing
+
+        y :: ys ->
+            Just (withSelectedElement [] y ys)
 
 
 {-| Convert the `Cursor` to a `List`
@@ -46,9 +49,8 @@ fromList _ =
 
 -}
 toList : Cursor a -> List a
-toList _ =
-    -- []
-    Debug.todo "toList"
+toList (Cursor left a right) =
+    List.reverse left ++ (a :: right)
 
 
 {-| Get the current element from the cursor
@@ -56,12 +58,9 @@ toList _ =
     current (nonEmpty 1 [ 2, 3 ]) {- ignore -} --> 1
 
     current (withSelectedElement [ 1, 2 ] 3 [ 4, 5 ]) {- ignore -} --> 3
-
 -}
 current : Cursor a -> a
-current (Cursor _ a _) =
-    a
-
+current (Cursor _ a _) = a
 
 {-| Move the cursor forward.
 
@@ -77,9 +76,12 @@ If the cursor would go past the last element, the function should return `Nothin
 
 -}
 forward : Cursor a -> Maybe (Cursor a)
-forward _ =
-    -- Nothing
-    Debug.todo "forward"
+forward cursor =
+    case cursor of
+        Cursor left a right ->
+            case right of
+                [] -> Nothing
+                r :: rs -> Just (Cursor (a :: left) r rs)
 
 
 {-| Move the cursor backward.
@@ -94,9 +96,12 @@ If the cursor would go before the first element, the function should return `Not
 
 -}
 back : Cursor a -> Maybe (Cursor a)
-back _ =
-    -- Nothing
-    Debug.todo "back"
+back cursor =
+    case cursor of
+        Cursor left a right ->
+            case left of
+                [] -> Nothing
+                l :: ls -> Just (Cursor ls l (a :: right))
 
 
 {-| Get the number of elements
@@ -107,6 +112,7 @@ back _ =
 
 -}
 length : Cursor a -> Int
-length _ =
-    -- 0
-    Debug.todo "length"
+length cursor =
+    case cursor of
+        Cursor left _ right ->
+            List.length left + 1 + List.length right

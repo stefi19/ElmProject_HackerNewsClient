@@ -3,9 +3,10 @@ module Main exposing (devFlags, init, main, prodFlags, reactorMain, update, view
 import Browser
 import Dict exposing (update)
 import Effect exposing (Effect, performEffect)
-import Html exposing (Html, button, div, input, select, text)
-import Html.Attributes exposing (href, type_)
-import Model exposing (AppState(..), Config, LoadingPostsState, Mode(..), Model, Msg(..))
+import Html exposing (Html, div, text)
+import Html.Attributes exposing (style)
+import Http
+import Model exposing (AppState(..), Config, Mode(..), Model, Msg(..), Theme(..))
 import Model.Post as Post
 import Model.PostIds as PostIds exposing (HackerNewsItem(..))
 import Model.PostsConfig
@@ -54,9 +55,8 @@ init flags _ =
     , Effect.GetTime
     )
 
-
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
     Sub.none
 
 
@@ -75,86 +75,80 @@ getPost apiUrl postId =
     Effect.GetPost { apiUrl = apiUrl, postId = postId, onResult = GotPost, decoder = Post.decode }
 
 
-addLoadedPost : Post.Post -> LoadingPostsState -> LoadingPostsState
-addLoadedPost post state =
-    { state | posts = post :: state.posts }
-
-
 update : Msg -> Model -> ( Model, Effect )
 update msg model =
-    let
-        ( newState, cmd ) =
-            case ( model.state, msg ) of
-                ( Model.Empty { config }, GotTime time ) ->
-                    ( Model.Loading { config = config, time = time }, getTopPostIds model.config.apiUrl )
+    case msg of
+        ToggleTheme ->
+            let
+                newTheme =
+                    case model.theme of
+                        Light -> Dark
 
-                ( Model.Loading { config, time }, GotPostIds result ) ->
-                    case result of
-                        Ok (Just ids) ->
-                            ( Model.LoadingPosts
-                                { config = config
-                                , time = time
-                                , postIds = ids
-                                , currentId = PostIds.first ids
-                                , posts = []
-                                }
-                            , getPost model.config.apiUrl (PostIds.first ids)
-                            )
+                        Dark -> Light
+            in
+            ( { model | theme = newTheme }, Effect.NoEffect )
 
-                        Ok Nothing ->
-                            ( Model.Empty { config = config }, Effect.NoEffect )
+        _ ->
+            let
+                ( newState, cmd ) =
+                    case ( model.state, msg ) of
+                        ( Model.Empty { config }, GotTime time ) ->
+                            ( Model.Loading { config = config, time = time }, getTopPostIds model.config.apiUrl )
 
-                        Err err ->
-                            ( Model.FailedToLoad err, Effect.NoEffect )
-
-                ( Model.LoadingPosts loading, GotPost result ) ->
-                    case result of
-                        Ok post ->
-                            case PostIds.advance loading.postIds of
-                                Just ( nextId, nextPostIds ) ->
-                                    let
-                                        posts =
-                                            post :: loading.posts
-                                    in
-                                    if List.length posts < loading.config.postsToFetch then
-                                        ( Model.LoadingPosts
-                                            { loading
-                                                | postIds = nextPostIds
-                                                , currentId = nextId
-                                                , posts = posts
-                                            }
-                                        , getPost model.config.apiUrl nextId
-                                        )
-
-                                    else
-                                        ( Model.LoadedPosts
-                                            { config = loading.config
-                                            , time = loading.time
-                                            , posts = List.reverse (post :: loading.posts)
-                                            }
-                                        , Effect.NoEffect
-                                        )
-
-                                Nothing ->
-                                    ( Model.LoadedPosts
-                                        { config = loading.config
-                                        , time = loading.time
-                                        , posts = List.reverse (post :: loading.posts)
-                                        }
-                                    , Effect.NoEffect
+                        ( Model.Loading { config, time }, GotPostIds result ) ->
+                            case result of
+                                Ok (Just ids) ->
+                                    ( Model.LoadingPosts { config = config, time = time, postIds = ids, currentId = PostIds.first ids, posts = [] }
+                                    , getPost model.config.apiUrl (PostIds.first ids)
                                     )
 
-                        Err err ->
-                            ( Model.FailedToLoad err, Effect.NoEffect )
+                                Ok Nothing ->
+                                    ( Model.Empty { config = config }, Effect.NoEffect )
 
-                ( Model.LoadedPosts state, ConfigChanged change ) ->
-                    -- ( Model.LoadedPosts state, Effect.NoEffect )
-                    ( Debug.todo "update the config in the update function", Effect.NoEffect )
+                                Err err ->
+                                    ( Model.FailedToLoad err, Effect.NoEffect )
 
-                ( state, _ ) ->
-                    ( state, Effect.NoEffect )
-    in
-    ( { model | state = newState }, cmd )
+                        ( Model.LoadingPosts loading, GotPost result ) ->
+                            case result of
+                                Ok post ->
+                                    case PostIds.advance loading.postIds of
+                                        Just ( nextId, nextPostIds ) ->
+                                            let posts = post :: loading.posts in
+                                            if List.length posts < loading.config.postsToFetch then
+                                                ( Model.LoadingPosts { loading | postIds = nextPostIds, currentId = nextId, posts = posts }
+                                                , getPost model.config.apiUrl nextId
+                                                )
+                                            else
+                                                ( Model.LoadedPosts { config = loading.config, time = loading.time, posts = List.reverse (post :: loading.posts) }
+                                                , Effect.NoEffect
+                                                )
+
+                                        Nothing ->
+                                            ( Model.LoadedPosts { config = loading.config, time = loading.time, posts = List.reverse (post :: loading.posts) }
+                                            , Effect.NoEffect
+                                            )
+
+                                Err err ->
+                                    ( Model.FailedToLoad err, Effect.NoEffect )
+
+                        ( Model.LoadedPosts state, ConfigChanged change ) ->
+                            let newConfig = Model.PostsConfig.applyChanges change state.config in
+                            ( Model.LoadedPosts { state | config = newConfig }, Effect.NoEffect )
+
+                        ( Model.LoadingPosts loading, ConfigChanged change ) ->
+                            let newConfig = Model.PostsConfig.applyChanges change loading.config in
+                            ( Model.LoadingPosts { loading | config = newConfig }, Effect.NoEffect )
+
+                        ( Model.Loading { config, time }, ConfigChanged change ) ->
+                            ( Model.Loading { config = Model.PostsConfig.applyChanges change config, time = time }, Effect.NoEffect )
+
+                        ( Model.Empty { config }, ConfigChanged change ) ->
+                            ( Model.Empty { config = Model.PostsConfig.applyChanges change config }, Effect.NoEffect )
+
+                        ( state, _ ) ->
+                            ( state, Effect.NoEffect )
+            in
+            ( { model | state = newState }, cmd )
 
 
 view : Model -> Html Msg
@@ -172,8 +166,8 @@ view model =
                 Model.Empty _ ->
                     div [] [ text "Loading" ]
 
-                Model.FailedToLoad _ ->
-                    div [] [ text "Failed to load" ]
+                Model.FailedToLoad err ->
+                    div [] [ text <| "Failed to load: " ++ httpErrorToString err ]
 
                 Model.LoadedPosts { config, time, posts } ->
                     div []
@@ -189,5 +183,34 @@ view model =
 
                 _ ->
                     div [] [ text "Other" ]
+        themeStyle =
+            case model.theme of
+                Light ->
+                    [ ( "background-color", "#ffffff" ), ( "color", "#111111" ) ]
+
+                Dark ->
+                    [ ( "background-color", "#0b0b0b" ), ( "color", "#e6e6e6" ) ]
+
+        attrs =
+            List.map (\(k, v) -> style k v) themeStyle
     in
-    div [] [ Html.h1 [] [ text title ], body ]
+    div attrs [ Html.h1 [] [ text title ], body ]
+
+
+httpErrorToString : Http.Error -> String
+httpErrorToString err =
+    case err of
+        Http.BadUrl url ->
+            "Bad URL: " ++ url
+
+        Http.Timeout ->
+            "Timeout"
+
+        Http.NetworkError ->
+            "Network error (could not reach server)"
+
+        Http.BadStatus status ->
+            "Bad status: " ++ String.fromInt status
+
+        Http.BadBody msg ->
+            "Bad body: " ++ msg
